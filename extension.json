@@ -1,0 +1,6 @@
+{
+    "name": "Sensors",
+    "type": "arduino",
+    "image": "sensor.png",
+    "example": "Arduino"
+}
