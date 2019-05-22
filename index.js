@@ -10,70 +10,7 @@ const log = Scratch.log;
 class SensorsExtension {
     constructor (runtime){
         this.runtime = runtime;
-        this.comm = runtime.ioDevices.comm;
-        this.session = null;
-        // session callbacks
-        this.onmessage = this.onmessage.bind(this);
-        this.onclose = this.onclose.bind(this);
 
-        this.decoder = new TextDecoder();
-        this.lineBuffer = '';
-    }
-
-    write (data){
-        if (!data.endsWith('\n')) data += '\n';
-        if (this.session) this.session.write(data);
-    }
-
-    report (data){
-        return new Promise(resolve => {
-            this.write(data);
-            this.reporter = resolve;
-        });
-    }
-
-
-    onmessage (data){
-        const dataStr = this.decoder.decode(data);
-        this.lineBuffer += dataStr;
-        if (this.lineBuffer.indexOf('\n') !== -1){
-            const lines = this.lineBuffer.split('\n');
-            this.lineBuffer = lines.pop();
-            for (const l of lines){
-                if (this.reporter) this.reporter(l);
-            }
-        }
-    }
-
-    onclose (){
-        this.session = null;
-    }
-
-    // method required by vm runtime
-    scan (){
-        this.comm.getDeviceList().then(result => {
-            this.runtime.emit(this.runtime.constructor.PERIPHERAL_LIST_UPDATE, result);
-        });
-    }
-
-    connect (id){
-        this.comm.connect(id).then(sess => {
-            this.session = sess;
-            this.session.onmessage = this.onmessage;
-            this.session.onclose = this.onclose;
-            // notify gui connected
-            this.runtime.emit(this.runtime.constructor.PERIPHERAL_CONNECTED);
-        }).catch(err => {
-            log.warn('connect peripheral fail', err);
-        });
-    }
-
-    disconnect (){
-        this.session.close();
-    }
-
-    isConnected (){
-        return Boolean(this.session);
     }
 
     _buildMenuFromArray (ary){
@@ -119,7 +56,7 @@ class SensorsExtension {
                             menu: 'analogPin'
                         }
                     },
-                    func: 'noop',
+                    func: 'sensorAnalog',
                     gen: {
                         arduino: this.sensorAnalogGen
                     }
@@ -144,7 +81,7 @@ class SensorsExtension {
                             menu: 'digiPin'
                         }
                     },
-                    func: 'noop',
+                    func: 'sensorDigit',
                     gen: {
                         arduino: this.sensorDigiGen
                     }
@@ -249,7 +186,7 @@ class SensorsExtension {
                             menu: 'digiPin'
                         }
                     },
-                    func: 'noop',
+                    func: 'ultrasonic',
                     gen: {
                         arduino: this.ultrasonicGen
                     }
@@ -386,12 +323,30 @@ class SensorsExtension {
 
 
     noop (){
+        return Promise.reject("Unsupport block in online mode")
+    }
 
+    sensorAnalog (args){
+        const pin = args.PIN;
+        return new Promise(resolve => {
+            board.analogRead(pin2firmata(pin), ret => {
+                resolve(ret);
+            })
+        });
     }
 
     sensorAnalogGen (gen, block){
         const pin = gen.valueToCode(block, 'PIN');
         return [`analogRead(${pin})`, gen.ORDER_ATOMIC];
+    }
+
+    sensorDigit (args){
+        const pin = args.PIN;
+        return new Promise(resolve => {
+            board.digitalRead(pin2firmata(pin), ret => {
+                resolve(ret);
+            })
+        });
     }
 
     sensorDigiGen (gen, block){
@@ -458,6 +413,20 @@ class SensorsExtension {
         const trig = gen.valueToCode(block, 'TRIG');
         const echo = gen.valueToCode(block, 'ECHO');
         return [`ultrasonicSensor(${trig}, ${echo})`, gen.ORDER_ATOMIC];
+    }
+
+    ultrasonic (args){
+        const pin = pin2firmata(args.PIN);
+        return new Promise(resolve => {
+            pingRead({
+                pin,
+                value: board.HIGH,
+                pulseOut: 5,
+            }, ms => {
+                ms = ms || 0;
+                resolve(ms.toFixed(2));
+            });
+        });
     }
 
     infraenGen (gen, block){
