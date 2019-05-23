@@ -7,10 +7,18 @@ const BlockType = Scratch.BlockType;
 const formatMessage = Scratch.formatMessage;
 const log = Scratch.log;
 
+const pin2firmata = pin => {
+    if (pin.startsWith('A')){
+        pin = parseInt(pin[1], 10)+14; // A0 starts with 14
+    } else {
+        pin = parseInt(pin, 10);
+    }
+    return pin;
+}
+
 class SensorsExtension {
     constructor (runtime){
         this.runtime = runtime;
-
     }
 
     _buildMenuFromArray (ary){
@@ -128,7 +136,7 @@ class SensorsExtension {
                             menu: 'digiPin'
                         }
                     },
-                    func: 'noop',
+                    func: 'ds18b20Setup',
                     gen: {
                         arduino: this.ds18b20SetupGen
                     }
@@ -141,9 +149,9 @@ class SensorsExtension {
                         id: 'sensors.ds18b20Read',
                         default: '18B20 Read'
                     }),
-                    func: 'noop',
+                    func: 'ds18b20Read',
                     gen: {
-                        arduino: this.ds18b20Read
+                        arduino: this.ds18b20ReadGen
                     }
                 },
                 {
@@ -160,9 +168,9 @@ class SensorsExtension {
                             defaultValue: 0
                         }
                     },
-                    func: 'noop',
+                    func: 'ds18b20',
                     gen: {
-                        arduino: this.ds18b20ReadGen
+                        arduino: this.ds18b20Gen
                     }
                 },
                 '---',
@@ -368,6 +376,18 @@ class SensorsExtension {
         }
     }
 
+    ds18b20Setup (args){
+        const pin = pin2firmata(args.PIN);
+        this.thm = new five.Thermometer({
+            controller: "DS18B20",
+            pin: pin,
+            board: j5board
+        });
+        this.thm.on('change', function(data){
+            this.thmdata = data;
+        });
+    }
+
     ds18b20SetupGen (gen, block){
         gen.includes_['ds18b20'] = '#include "OneWire.h"\n' +
             '#include "DallasTemperature.h"';
@@ -377,11 +397,19 @@ class SensorsExtension {
         return gen.line(`onewire.updatePin(${pin})`) + gen.line(`ds18b20.begin()`);
     }
 
-    ds18b20Read (gen, block){
-        return gen.line('ds18b20.requestTemperatures()');
+    ds18b20Read (args){
+        
     }
 
     ds18b20ReadGen (gen, block){
+        return gen.line('ds18b20.requestTemperatures()');
+    }
+
+    ds18b20 (args){
+        return this.thmdata ? this.thmdata.C : -273;
+    }
+
+    ds18b20Gen (gen, block){
         const index = gen.valueToCode(block, 'INDEX');
         return [`ds18b20.getTempCByIndex(${index})`, gen.ORDER_ATOMIC];
     }
