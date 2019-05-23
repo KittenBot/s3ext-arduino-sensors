@@ -444,7 +444,7 @@ class SensorsExtension {
     }
 
     ultrasonic (args){
-        const pin = pin2firmata(args.PIN);
+        const pin = pin2firmata(args.TRIG);
         return new Promise(resolve => {
             pingRead({
                 pin,
